@@ -1,7 +1,12 @@
-#define PWM_1 9 //Sygnał PWM silnika nr 1
-#define DIR1 7 //Kierunek obrotu koła 1
-#define MIDDLE_FB 2.5
-#define MIDDLE_RL 2.5
+#define PWM_L 9  //Sygnał PWM silnika L
+#define PWM_R 10 //Sygnał PWM silnika R
+#define DIR_L 7 //Kierunek obrotu koła L
+#define DIR_R 8 //Kierunek obrotu koła P
+#define JOY_FB 5 //Joystick F/B
+#define JOY_RL 6 //Joystick R/L
+
+#define MIDDLE_FB 512 //2.5 V
+#define MIDDLE_RL 512 //2.5 V
 #define FORWARD 1
 #define BACKWARD 0
 #define TURN_LEFT 1
@@ -12,7 +17,7 @@
 //CALIBRATIONS
 #define JOYSTICK_CALIBRATION 0.15
 #define MAX_SPEED_LIMIT 0.6
-#define MAX_TURN_LIMIT 0.3
+#define MAX_TURN_LIMIT 0.3 //to musi byc mala wartosc, im blizej 1 tym jedno kolo bardziej zahamuje przy skrecaniu
 
 bool _dir = 0; //Kierunek obrotu kół 1=f  0=b
 int speed = 0; //0-255
@@ -27,30 +32,34 @@ int speed = 0; //0-255
 void setup() {
   // put your setup code here, to run once:
   //do zrobienia
+  pinMode(PWM_R, OUTPUT); //Sygnał PWM silnika R
+  pinMode(PWM_L, OUTPUT); //Sygnał PWM silnika L
+  pinMode(DIR_R, OUTPUT); //Kierunek obrotu koła R
+  pinMode(DIR_L, OUTPUT); //Kierunek obrotu koła L
+  pinMode(JOY_FB, INPUT); //Joystick F/B
+  pinMode(JOY_RL, INPUT); //Joystick R/L
 }
 
 void loop() {
-  while{
-  // input // jazda 0 (przod)
-  // input skret // skret 0 (prawo)
-  double fb = 2.5;
-  double rl = 2.5;
+  // put your main code here, to run repeatedly:
+  double fb = analogRead(JOY_FB);
+  double rl = analogRead(JOY_RL);
   double wheelR, wheelL;
   
   setDirectionFB(fb);
-  direction = getDirectionFB();
   velocityFB = getVelocityFB(fb);
   wheelR = velocityFB * MAX_SPEED * MAX_SPEED_LIMIT;
   wheelL = velocityFB * MAX_SPEED * MAX_SPEED_LIMIT;
 
   turn = getDirectionRL(rl);
   if (turn == TURN_LEFT)
-    wheelL -= getVelocityRL(rl) * TURN_MULTIPIER * MAX_TURN_LIMIT;
+    wheelL = wheelL - getVelocityRL(rl) * TURN_MULTIPIER * MAX_TURN_LIMIT; //zmniejszamy predkosc kola L o wartosc z przedzialu (0-1) * mnozniki stałe
   else if (turn == TURN_RIGHT)
-    wheelR -= getVelocityRL(rl) * TURN_MULTIPIER * MAX_TURN_LIMIT;
+    wheelR = wheelR - getVelocityRL(rl) * TURN_MULTIPIER * MAX_TURN_LIMIT;
   
   //ustaw wartosci wheelR i wheelL do odpowiednich pinow
-}
+  setLeftWheel(wheelL);
+  setRightWheel(wheelR);
 }
 
 // przod y=0
@@ -64,13 +73,23 @@ void loop() {
 
 void setDirectionFB(double fb_input){
 // direction 0 - 2.5 forward | 2.5 - 5 backward
-  if (getVelocity > 0) //todo: ile????
-    _dir;
+  // if (getVelocity > 0) //todo: ile???? ograniczenie predkosci
+  //   return;
 
-  if (fb_input <= MIDDLE_FB - JOYSTICK_CALIBRATION) //jazda do przodu
-    _dir = FORWARD;
-  else if (fb_input >= MIDDLE_FB + JOYSTICK_CALIBRATION) //jazda do tyłu
-    _dir = BACKWARD;
+  if (fb_input <= MIDDLE_FB - MIDDLE_FB * JOYSTICK_CALIBRATION){  //jazda do przodu
+    if(_dir != FORWARD){
+      _dir = FORWARD;
+      digitalWrite(DIR_L, _dir);
+      digitalWrite(DIR_R, !_dir);
+    }
+  } 
+  else if (fb_input >= MIDDLE_FB + MIDDLE_FB * JOYSTICK_CALIBRATION){ //jazda do tyłu
+    if(_dir != BACKWARD){
+      _dir = BACKWARD;
+      digitalWrite(DIR_L, !_dir);
+      digitalWrite(DIR_R, _dir);
+    }
+  }
 }
 
 bool getDirectionFB(){
@@ -80,26 +99,34 @@ bool getDirectionFB(){
 
 double getVelocityFB(double fb_input){ //zwraca prędkość od 0 do 1
   // 1 - MAX_SPEED || 0 - MIN_SPEED
-  if (fb_input <= MIDDLE_FB - JOYSTICK_CALIBRATION)
-    return 1.0 - (fb_input/(MIDDLE_FB - JOYSTICK_CALIBRATION));
-  else if (fb_input >= MIDDLE_FB + JOYSTICK_CALIBRATION)
-    return (fb_input/(MIDDLE_FB + JOYSTICK_CALIBRATION)) - 1.0;
+  if (fb_input <= MIDDLE_FB - MIDDLE_FB * JOYSTICK_CALIBRATION)
+    return 1.0 - (fb_input/(MIDDLE_FB - MIDDLE_FB * JOYSTICK_CALIBRATION));
+  else if (fb_input >= MIDDLE_FB + MIDDLE_FB * JOYSTICK_CALIBRATION)
+    return (fb_input/(MIDDLE_FB + MIDDLE_FB * JOYSTICK_CALIBRATION)) - 1.0;
 }
 
 int getDirectionRL(double turn){
   // 1 - left || -1 - right || 0 - nothing
-  if (turn <= MIDDLE_RL - JOYSTICK_CALIBRATION)
+  if (turn <= MIDDLE_RL - MIDDLE_RL * JOYSTICK_CALIBRATION)
     return TURN_RIGHT;
-  else if (turn >= MIDDLE_RL + JOYSTICK_CALIBRATION)
+  else if (turn >= MIDDLE_RL + MIDDLE_RL * JOYSTICK_CALIBRATION)
     return TURN_LEFT;
   return NO_TURN;
 }
 
 double getVelocityRL(double rl_input){ //zwraca skręt od 0 do 1
   // 1 - MAX_TURN || 0 - MIN_TURN
-  if (rl_input <= MIDDLE_RL - JOYSTICK_CALIBRATION)
-    return 1.0 - (rl_input/(MIDDLE_RL - JOYSTICK_CALIBRATION));
-  else if (rl_input >= MIDDLE_RL + JOYSTICK_CALIBRATION)
-    return (rl_input/(MIDDLE_RL + JOYSTICK_CALIBRATION)) - 1.0;
+  if (rl_input <= MIDDLE_RL - MIDDLE_RL * JOYSTICK_CALIBRATION)
+    return 1.0 - (rl_input/(MIDDLE_RL - MIDDLE_RL * JOYSTICK_CALIBRATION));
+  else if (rl_input >= MIDDLE_RL + MIDDLE_RL * JOYSTICK_CALIBRATION)
+    return (rl_input/(MIDDLE_RL + MIDDLE_RL * JOYSTICK_CALIBRATION)) - 1.0;
 }
 
+
+void setLeftWheel(double vel){
+  analogWrite(PWM_L, int(vel));
+}
+
+void setRightWheel(double vel){
+  analogWrite(PWM_R, int(vel));
+}
